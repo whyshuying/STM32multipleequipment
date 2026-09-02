@@ -66,7 +66,10 @@ void Show_Battery(void)
 	}
 	ADValue=sum/3000;
 	VBAT=(float)ADValue/4095*3.3;
-	Battery_Capacity=(ADValue-3276)*100/819;
+	
+	Battery_Capacity=ADValue*100/4095;//模拟adc电量转换，测试使用这个
+//	Battery_Capacity=(ADValue-3276)*100/819;//电池电量转换，实际外接电池使用这个，具体电池数据也要变
+	
 	if(Battery_Capacity<0)Battery_Capacity=0;
 	
 	//OLED_ShowNum(64,0,ADValue,4,OLED_6X8);
@@ -601,32 +604,81 @@ int16_t ax,ay,az,gx,gy,gz;//MPU6050测得的三轴加速度和角速度
 float roll_g,pitch_g,yaw_g;//陀螺仪解算的欧拉角
 float roll_a,pitch_a;//加速度计解算的欧拉角
 float Roll,Pitch,Yaw;//互补滤波后的欧拉角
-float a=0.88;//互补滤波器系数
-float Delta_t=0.005;//采样周期5ms
+float a=0.98f;//互补滤波器系数
+float Delta_t=0.005f;//采样周期约5ms
 double pi=3.1415927;
+
+/* MPU6050 ±2000°/s量程的灵敏度：16.4 LSB/(°/s) */
+int32_t gyro_x_bias,gyro_y_bias;
+float roll_zero,pitch_zero;
+uint8_t MPU6050_Calibrated;
+
+//上电时校准陀螺仪零偏和当前放平姿态
+void MPU6050_Calibrate(void)
+{
+	int32_t sum_gx=0;
+	int32_t sum_gy=0;
+	float sum_roll=0;
+	float sum_pitch=0;
+	uint8_t i;
+
+	for(i=0;i<50;i++)
+	{
+		MPU6050_GetData(&ax,&ay,&az,&gx,&gy,&gz);
+		sum_gx+=gx;
+		sum_gy+=gy;
+		sum_roll+=atan2((double)ay,(double)az)*180.0/pi;
+		sum_pitch+=atan2((double)(-ax),
+						 sqrt((double)ay*ay+(double)az*az))*180.0/pi;
+		Delay_ms(5);
+	}
+
+	gyro_x_bias=sum_gx/50;
+	gyro_y_bias=sum_gy/50;
+	roll_zero=sum_roll/50.0f;
+	pitch_zero=sum_pitch/50.0f;
+	Roll=0;
+	Pitch=0;
+	MPU6050_Calibrated=1;
+}
 
 //通过MPU6050的数据进行姿态解算的函数
 void MPU6050_Calculation(void)
 {
-	Delay_ms(5);
+	float gyro_x_dps;
+	float gyro_y_dps;
+	float current_roll;
+	float current_pitch;
+
+	if(MPU6050_Calibrated==0)
+	{
+		MPU6050_Calibrate();
+	}
+
 	MPU6050_GetData(&ax,&ay,&az,&gx,&gy,&gz);
-	
-	//通过陀螺仪解算欧拉角
-	roll_g=Roll+(float)gx*Delta_t;
-	pitch_g=Pitch+(float)gy*Delta_t;
-	yaw_g=Yaw+(float)gz*Delta_t;
-	
-	//通过加速度计解算欧拉角
-	pitch_a=atan2((-1)*ax,az)*180/pi;
-	roll_a=atan2(ay,az)*180/pi;
-	
-	//通过互补滤波器进行数据融合
+
+	/* 先将陀螺仪原始值换算为°/s，再进行积分 */
+	gyro_x_dps=(float)(gx-gyro_x_bias)/16.4f;
+	gyro_y_dps=(float)(gy-gyro_y_bias)/16.4f;
+	roll_g=Roll+gyro_x_dps*Delta_t;
+	pitch_g=Pitch+gyro_y_dps*Delta_t;
+
+	/* 加速度计同时使用三个轴，减小另一方向倾斜带来的耦合 */
+	current_roll=atan2((double)ay,(double)az)*180.0/pi-roll_zero;
+	current_pitch=atan2((double)(-ax),
+						 sqrt((double)ay*ay+(double)az*az))*180.0/pi-pitch_zero;
+
+	roll_a=current_roll;
+	pitch_a=current_pitch;
+
+	/* 通过互补滤波融合陀螺仪和加速度计 */
 	Roll=a*roll_g+(1-a)*roll_a;
 	Pitch=a*pitch_g+(1-a)*pitch_a;
-	Yaw=a*yaw_g;
-	
-}
 
+	/* Yaw保持原有逻辑不变 */
+	yaw_g=Yaw+(float)gz*Delta_t;
+	Yaw=a*yaw_g;
+}
 //显示MPU6050界面的UI
 void Show_MPU6050_UI(void)
 {
@@ -759,57 +811,113 @@ int Game(void)
 
 /*----------------------------------动态表情包-------------------------------------*/
 
-//显示动态表情包
+uint8_t animation_flag=1;
+uint8_t emoji_frame;
+uint8_t emoji_pause_count;
+uint8_t cat_frame;
+
+//显示原有表情动画的一帧
 void Show_Emoji_UI(void)
 {
-	/*闭眼*/
-	for(uint8_t i=0;i<3;i++)
+	uint8_t frame=emoji_frame;
+
+	/* 原动画最后一帧保持500ms，恢复原来的眨眼节奏 */
+	if(emoji_pause_count>0)
 	{
-		OLED_Clear();
-		OLED_ShowImage(30,10+i,16,16,Eyebrow[0]);//左眉毛
-		OLED_ShowImage(82,10+i,16,16,Eyebrow[1]);//右眉毛
-		OLED_DrawEllipse(40,32,6,6-i,1);//左眼
-		OLED_DrawEllipse(88,32,6,6-i,1);//右眼
-		OLED_ShowImage(54,40,20,20,Mouth);
-		OLED_Update();
-		Delay_ms(100);
+		frame=5;
 	}
-	
-	/*睁眼*/
-	for(uint8_t i=0;i<3;i++)
+
+	OLED_Clear();
+	if(frame<3)
 	{
-		OLED_Clear();
-		OLED_ShowImage(30,12-i,16,16,Eyebrow[0]);//左眉毛
-		OLED_ShowImage(82,12-i,16,16,Eyebrow[1]);//右眉毛
-		OLED_DrawEllipse(40,32,6,4+i,1);//左眼
-		OLED_DrawEllipse(88,32,6,4+i,1);//右眼
-		OLED_ShowImage(54,40,20,20,Mouth);
-		OLED_Update();
-		Delay_ms(100);
+		OLED_ShowImage(30,10+frame,16,16,Eyebrow[0]);//左眉毛
+		OLED_ShowImage(82,10+frame,16,16,Eyebrow[1]);//右眉毛
+		OLED_DrawEllipse(40,32,6,6-frame,1);//左眼
+		OLED_DrawEllipse(88,32,6,6-frame,1);//右眼
 	}
-	
-	Delay_ms(500);
-	
+	else
+	{
+		frame-=3;
+		OLED_ShowImage(30,12-frame,16,16,Eyebrow[0]);//左眉毛
+		OLED_ShowImage(82,12-frame,16,16,Eyebrow[1]);//右眉毛
+		OLED_DrawEllipse(40,32,6,4+frame,1);//左眼
+		OLED_DrawEllipse(88,32,6,4+frame,1);//右眼
+	}
+	OLED_ShowImage(54,40,20,20,Mouth);
+	OLED_Update();
+
+	if(emoji_pause_count>0)
+	{
+		emoji_pause_count++;
+		if(emoji_pause_count>=5)
+		{
+			emoji_pause_count=0;
+			emoji_frame=0;
+		}
+	}
+	else
+	{
+		emoji_frame++;
+		if(emoji_frame>=6)
+		{
+			emoji_pause_count=1;
+		}
+	}
+	Delay_ms(100);
+}
+//显示“我很臭吗”图片动画的一帧
+void Show_Cat_Video(void)
+{
+	OLED_Clear();
+	OLED_ShowImage(32,0,64,64,cat_vedio[cat_frame]);
+	OLED_Update();
+
+	cat_frame++;
+	if(cat_frame>=30)
+	{
+		cat_frame=0;
+	}
+	Delay_ms(50);
 }
 
-//用按键控制退出动态表情包界面的函数
+//用按键控制动画切换和退出动态表情包界面
 int Emoji(void)
 {
+	animation_flag=1;
+	emoji_frame=0;
+	emoji_pause_count=0;
+	cat_frame=0;
+
 	while(1)
 	{
 		KeyNum=Key_GetNum();
-		if(KeyNum==3)
+		if(KeyNum==1)
+		{
+			if(animation_flag==1) animation_flag=2;
+			else animation_flag=1;
+		}
+		else if(KeyNum==2)
+		{
+			if(animation_flag==2) animation_flag=1;
+			else animation_flag=2;
+		}
+		else if(KeyNum==3)
 		{
 			OLED_Clear();
 			OLED_Update();
 			return 0;
 		}
-		
-		Show_Emoji_UI();
-		
+
+		if(animation_flag==1)
+		{
+			Show_Emoji_UI();
+		}
+		else
+		{
+			Show_Cat_Video();
+		}
 	}
 }
-
 /*----------------------------------水平仪-------------------------------------*/
 //显示水平仪
 void Show_Gradienter_UI(void)

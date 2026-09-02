@@ -43,7 +43,8 @@ extern const uint8_t Eyebrow[][32];
 extern const uint8_t Mouth[];
 extern const uint8_t Battery[];
 
-extern const uint8_t light[];
+extern const uint8_t light[];//灯条
+extern const uint8_t cat_vedio[][512];
 /*按照上面的格式，在这个位置加入新的图像数据声明*/
 //...
 

@@ -57,10 +57,10 @@ void Show_Barrier(void)
 	
 	OLED_ShowImage(127-Barrier_Pos,44,16,18,Barrier[barrier_flag]);
 	
-	barrier.minX=127-Barrier_Pos;
-	barrier.maxX=143-Barrier_Pos;
-	barrier.minY=44;
-	barrier.maxY=62;
+	barrier.minX=128-Barrier_Pos;//与实物减小1
+	barrier.maxX=142-Barrier_Pos;//与实物减小1
+	barrier.minY=43;//与实物减小1
+	barrier.maxY=61;//与实物减小1
 }
 
 uint8_t Cloud_Pos;
@@ -82,7 +82,7 @@ void Show_Dino(void)
 {
 	KeyNum=Key_GetNum();
 	if(KeyNum==1)dino_jump_flag=1;
-	Jump_Pos=28*sin((float)(pi*jump_t/1000));
+	Jump_Pos=28*sin((float)(pi*jump_t/900));//900ms
 	
 	if(dino_jump_flag==0)
 	{
@@ -102,7 +102,7 @@ void Show_Dino(void)
 }
 
 //碰撞检测函数，传入两个结构体的地址
-int isColliding(struct Object_Position *a,struct Object_Position *b)
+int isColliding(struct Object_Position *a,struct Object_Position *b)//前一个小恐龙，后一个障碍物，碰撞判断
 {
 	if((a->maxX>b->minX)&&(a->minX<b->maxX)&&(a->maxY>b->minY)&&(a->minY<b->maxY))
 	{
@@ -173,7 +173,7 @@ void Dino_Tick(void)
 	if(dino_jump_flag==1)
 	{
 		jump_t++;
-		if(jump_t>=1000)
+		if(jump_t>=900)//900ms一次跳跃
 		{
 			jump_t=0;
 			dino_jump_flag=0;
