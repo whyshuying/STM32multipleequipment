@@ -94,7 +94,7 @@ Project.uvprojx
 项目已经完成主要功能代码和工程文件整理，适合用于 STM32 外设学习、嵌入式界面开发、状态机和非易失数据存储实践。建议在发布视频前使用目标硬件完成一次完整 Rebuild、烧录和长时间运行测试。
 
 ## 开源内容
-代码：
+代码地址：https://github.com/whyshuying/STM32multipleequipment
 
 演示视频地址：待上传
 
