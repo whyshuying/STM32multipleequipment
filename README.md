@@ -96,6 +96,4 @@ Project.uvprojx
 ## 开源内容
 代码地址：https://github.com/whyshuying/STM32multipleequipment
 
-演示视频地址：待上传
-
 仓库保留源代码、Keil 工程文件和图片字库资源。`Objects/`、`Listings/`、`DebugConfig/`、`*.uvguix.*` 和 `*.uvoptx` 等构建产物及用户配置文件通过 `.gitignore` 排除。
